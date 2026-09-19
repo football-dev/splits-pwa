@@ -12,14 +12,17 @@
  * with this app's origin (https://football-dev.github.io) listed under
  * Authorised JavaScript origins.
  *
- * API_BASE and the fetchRecentRuns() endpoint/response shape are still
- * unverified against the current Google Health API docs.
+ * API_BASE and fetchRecentRuns() follow the live v4 discovery document
+ * (https://health.googleapis.com/$discovery/rest?version=v4), which is the
+ * source of truth — re-check it there if the API responds unexpectedly.
+ * Listing exercise data points is covered by the activity_and_fitness.readonly
+ * scope; there is no separate "exercise" scope.
  */
 
 const HealthSync = (() => {
 
   const CLIENT_ID = '999514215655-bsk9nklad96oae4vm1gs255aklaqnatv.apps.googleusercontent.com';
-  const API_BASE = 'https://healthapi.googleapis.com/v1'; // verify against developers.google.com/health before relying on it
+  const API_BASE = 'https://health.googleapis.com/v4'; // rootUrl from https://health.googleapis.com/$discovery/rest?version=v4
   const SCOPES = [
     'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
     'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
@@ -140,25 +143,53 @@ const HealthSync = (() => {
       headers: { Authorization: `Bearer ${token.access_token}` }
     });
     if (res.status === 401) throw expire(); // revoked or expired server-side
-    if (!res.ok) throw new Error(`Google Health API error: ${res.status}`);
+    if (!res.ok) {
+      console.error('Google Health API error', res.status, await res.text().catch(() => ''));
+      throw new Error(`Google Health API error: ${res.status}`);
+    }
     return res.json();
   }
 
-  // Pull recent runs. Endpoint shape follows the legacy Fitbit
-  // "activities/list" call — confirm against current docs.
+  // Google Health exerciseType values that count as a run for the plan.
+  const RUN_TYPES = new Set(['RUNNING', 'TRAIL_RUN', 'INCLINE_RUN', 'TREADMILL']);
+  const EXERCISE_PAGE_SIZE = 25; // API maximum for the exercise data type
+  const MAX_PAGES = 20;
+
+  // Pull runs starting on or after sinceISODate (YYYY-MM-DD).
+  // users.dataTypes.dataPoints.list, v4 discovery doc: session types filter on
+  // exercise.interval.civil_start_time, results come newest-first, and each
+  // item is a DataPoint with the session under `.exercise`.
   async function fetchRecentRuns(sinceISODate) {
-    const data = await authorisedFetch(
-      `/activities/list.json?afterDate=${sinceISODate}&sort=asc&limit=50&offset=0`
-    );
-    const activities = data.activities || [];
-    return activities
-      .filter(a => /run/i.test(a.activityName || ''))
-      .map(a => ({
-        date: a.startTime,
-        distanceKm: a.distance,
-        durationMin: Math.round((a.duration || 0) / 60000),
-        avgHeartRate: a.averageHeartRate || null
-      }));
+    const filter = `exercise.interval.civil_start_time >= "${sinceISODate}"`;
+    const runs = [];
+    let pageToken = '';
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const query = new URLSearchParams({ filter, pageSize: EXERCISE_PAGE_SIZE });
+      if (pageToken) query.set('pageToken', pageToken);
+
+      const data = await authorisedFetch(`/users/me/dataTypes/exercise/dataPoints?${query}`);
+
+      (data.dataPoints || []).forEach(point => {
+        const ex = point.exercise;
+        if (!ex || !RUN_TYPES.has(ex.exerciseType)) return;
+        const start = ex.interval && ex.interval.startTime;
+        const end = ex.interval && ex.interval.endTime;
+        const metrics = ex.metricsSummary || {};
+        const hr = Number(metrics.averageHeartRateBeatsPerMinute); // int64 arrives as a string
+        runs.push({
+          date: start,
+          distanceKm: (metrics.distanceMillimeters || 0) / 1_000_000,
+          durationMin: start && end ? Math.round((new Date(end) - new Date(start)) / 60000) : 0,
+          avgHeartRate: hr || null
+        });
+      });
+
+      pageToken = data.nextPageToken;
+      if (!pageToken) break;
+    }
+
+    return runs.reverse(); // oldest first, as reconcileRuns expects
   }
 
   return { beginAuth, onChange, isConnected, disconnect, fetchRecentRuns };

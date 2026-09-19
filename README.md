@@ -55,9 +55,11 @@ then on.
 3. Sign-in gives an access token that lasts about an hour, with no
    refresh token. When it expires the app clears it and the button
    goes back to "Connect Google Health".
-4. Confirm `API_BASE` and the endpoint in `fetchRecentRuns()` against
-   the current Google Health API docs. They're scaffolded from the
-   legacy Fitbit Web API shape and haven't been verified.
+4. `API_BASE` and `fetchRecentRuns()` follow the v4 discovery document
+   (`https://health.googleapis.com/$discovery/rest?version=v4`), which
+   is the source of truth if the API changes. Runs come from
+   `users/me/dataTypes/exercise/dataPoints`, covered by the
+   `activity_and_fitness.readonly` scope.
 5. On your iPhone: Apple Watch → Apple Health (records the run,
    including GPS) → Google Health (via the Apple Health sync you've
    already set up) → this app pulls it in via the API.
