@@ -32,6 +32,11 @@ const PlanStats = (() => {
     return `${d.getFullYear()}-${mm}-${dd}`;
   }
 
+  // Timestamp of local midnight on the first day of a plan week.
+  function weekStart(plan, weekNumber) {
+    return planStart(plan) + (weekNumber - 1) * WEEK_MS;
+  }
+
   function currentWeekNumber(plan, now = Date.now()) {
     const weeksElapsed = Math.floor((now - planStart(plan)) / WEEK_MS);
     return Math.max(1, Math.min(plan.totalWeeks, weeksElapsed + 1));
@@ -241,7 +246,7 @@ const PlanStats = (() => {
   }
 
   return {
-    startDate, currentWeekNumber, weekIndexFor, sessionState, reconcile,
+    startDate, weekStart, currentWeekNumber, weekIndexFor, sessionState, reconcile,
     markManualDone, undoManual, paceSecPerKm, weekActualKm, daysToRace,
     streak, hero, weeklySeries, runLog
   };
