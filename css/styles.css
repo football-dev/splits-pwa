@@ -207,6 +207,17 @@ h1 { font-size: 1.8rem; line-height: 1.15; }
 
 .toast.hidden { display: none; }
 
+.app-version {
+  position: fixed;
+  right: calc(env(safe-area-inset-right) + 10px);
+  bottom: calc(env(safe-area-inset-bottom) + 6px);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 10;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

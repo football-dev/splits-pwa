@@ -7,6 +7,24 @@
 
 const PLAN_KEY = 'splits_plan';
 
+// Keep in step with CACHE_NAME in service-worker.js ('splits-' + APP_VERSION).
+const APP_VERSION = 'v4';
+
+// Shows the version this page is running. If a newer service worker has
+// already taken over the cache, flag that a reload is needed to pick it up.
+async function showVersion() {
+  const el = document.getElementById('appVersion');
+  el.textContent = APP_VERSION;
+  try {
+    const active = (await caches.keys()).find(k => k.startsWith('splits-'));
+    if (active && active !== `splits-${APP_VERSION}`) {
+      el.textContent = `${APP_VERSION} · ${active.slice('splits-'.length)} available, reload`;
+    }
+  } catch (err) {
+    // Cache API unavailable (e.g. insecure context) — the plain version is enough.
+  }
+}
+
 const distanceLabels = { 5: '5K', 10: '10K', 21.1: 'Half marathon', 42.2: 'Marathon' };
 
 function loadPlan() {
@@ -148,6 +166,7 @@ async function syncRuns(plan) {
 }
 
 async function init() {
+  showVersion();
   HealthSync.onChange(({ reason, error }) => {
     updateConnectButton();
     if (error) {
