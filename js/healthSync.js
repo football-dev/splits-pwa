@@ -18,12 +18,16 @@
 
 const HealthSync = (() => {
 
-  const CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+  const CLIENT_ID = '999514215655-bsk9nklad96oae4vm1gs255aklaqnatv.apps.googleusercontent.com';
   const REDIRECT_URI = window.location.origin + window.location.pathname;
-  const AUTH_ENDPOINT = 'https://www.fitbit.com/oauth2/authorize';
-  const TOKEN_ENDPOINT = 'https://api.fitbit.com/oauth2/token';
-  const API_BASE = 'https://api.fitbit.com/1/user/-';
-  const SCOPES = ['activity', 'heartrate', 'location', 'profile'];
+  const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
+  const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+  const API_BASE = 'https://healthapi.googleapis.com/v1'; // verify against developers.google.com/health before relying on it
+  const SCOPES = [
+    'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+    'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
+    'https://www.googleapis.com/auth/googlehealth.location.readonly'
+  ];
 
   const STORAGE_KEY = 'splits_health_token';
 
