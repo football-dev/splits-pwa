@@ -1,4 +1,4 @@
-const CACHE_NAME = 'splits-v4';
+const CACHE_NAME = 'splits-v5';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const APP_SHELL = [
   './css/styles.css',
   './js/app.js',
   './js/planGenerator.js',
+  './js/planStats.js',
   './js/healthSync.js',
   './icons/icon-192.png',
   './icons/icon-512.png'

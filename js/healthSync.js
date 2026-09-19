@@ -177,10 +177,13 @@ const HealthSync = (() => {
         const end = ex.interval && ex.interval.endTime;
         const metrics = ex.metricsSummary || {};
         const hr = Number(metrics.averageHeartRateBeatsPerMinute); // int64 arrives as a string
+        const durationSec = start && end ? Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000)) : 0;
         runs.push({
+          id: start, // a session's start time identifies it
           date: start,
           distanceKm: (metrics.distanceMillimeters || 0) / 1_000_000,
-          durationMin: start && end ? Math.round((new Date(end) - new Date(start)) / 60000) : 0,
+          durationMin: Math.round(durationSec / 60),
+          durationSec,
           avgHeartRate: hr || null
         });
       });
@@ -189,7 +192,21 @@ const HealthSync = (() => {
       if (!pageToken) break;
     }
 
-    return runs.reverse(); // oldest first, as reconcileRuns expects
+    return dedupeRuns(runs).reverse(); // oldest first
+  }
+
+  // The same workout is often written by more than one source (watch plus a
+  // phone app), one copy with no distance. Collapse entries that start within
+  // two minutes of each other, keeping the one with the most data.
+  function dedupeRuns(runs) {
+    const richness = r => (r.distanceKm > 0 ? 2 : 0) + (r.avgHeartRate ? 1 : 0);
+    const kept = [];
+    runs.forEach(run => {
+      const twin = kept.findIndex(k => Math.abs(new Date(k.date) - new Date(run.date)) <= 2 * 60 * 1000);
+      if (twin === -1) kept.push(run);
+      else if (richness(run) > richness(kept[twin])) kept[twin] = run;
+    });
+    return kept;
   }
 
   return { beginAuth, onChange, isConnected, disconnect, fetchRecentRuns };
