@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Splits</title>
+<meta name="description" content="A training plan generator and run tracker built around Google Health.">
+
+<!-- PWA / iOS home screen setup -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Splits">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#14201c">
+
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Splits</span>
+  <button id="connectBtn" class="ghost-btn">Connect Google Health</button>
+</header>
+
+<main id="app">
+
+  <!-- Empty state: no plan yet -->
+  <section id="onboarding" class="screen">
+    <h1>Build your plan</h1>
+    <p class="lede">Tell Splits what you're training for. It lays out the weeks; you run them; it adjusts as you go.</p>
+
+    <form id="planForm" class="plan-form">
+      <label class="field">
+        <span>Goal distance</span>
+        <select id="goalDistance" required>
+          <option value="5">5K</option>
+          <option value="10">10K</option>
+          <option value="21.1" selected>Half marathon</option>
+          <option value="42.2">Marathon</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Race date</span>
+        <input type="date" id="raceDate" required>
+      </label>
+
+      <label class="field">
+        <span>Current weekly volume (km)</span>
+        <input type="number" id="currentVolume" min="0" step="1" value="20" required>
+      </label>
+
+      <label class="field">
+        <span>Runs per week</span>
+        <input type="number" id="runsPerWeek" min="2" max="7" value="4" required>
+      </label>
+
+      <button type="submit" class="primary-btn">Generate plan</button>
+    </form>
+  </section>
+
+  <!-- Main plan view -->
+  <section id="planView" class="screen hidden">
+    <div class="plan-header">
+      <div>
+        <h1 id="planTitle">Half marathon</h1>
+        <p id="planSubtitle" class="lede">Week <span id="currentWeekNum">1</span> of <span id="totalWeeks">12</span></p>
+      </div>
+      <button id="resetBtn" class="ghost-btn small">Start over</button>
+    </div>
+
+    <div id="weekList" class="week-list"></div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/planGenerator.js"></script>
+<script src="js/healthSync.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

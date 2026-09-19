@@ -1,0 +1,15 @@
+{
+  "name": "Splits",
+  "short_name": "Splits",
+  "description": "Training plan generator and run tracker built on Google Health.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14201c",
+  "theme_color": "#14201c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
