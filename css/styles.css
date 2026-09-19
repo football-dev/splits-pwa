@@ -576,6 +576,62 @@ h2.eyebrow { margin: 0; font-weight: 400; }
   color-scheme: dark;
 }
 .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+/* Experience selector: native radios, drawn as a segmented control. */
+.level-field { border: none; margin: 0; padding: 0; min-width: 0; }
+.level-field legend { padding: 0; margin-bottom: 6px; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.segmented label { position: relative; display: block; }
+.segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.segmented span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 4px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text-2);
+  text-align: center;
+}
+.segmented input:checked + span { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Fitness question: four radio cards with a one-line description. */
+.choice-list { display: flex; flex-direction: column; gap: 6px; }
+.choice-list label { position: relative; display: block; }
+.choice-list input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.choice-list .choice {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 8px 14px;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+.choice-list .choice-title { font-size: 14px; color: var(--text); }
+.choice-list .choice-blurb { font-size: 12px; color: var(--muted); }
+.choice-list input:checked + .choice { background: var(--accent-tint); border-color: var(--accent); }
+.choice-list input:checked + .choice .choice-title { color: var(--accent); font-weight: 600; }
+.choice-list input:focus-visible + .choice { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+.warning {
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.warning p { margin: 0; }
+.warning p + p { margin-top: 8px; }
+.warning .warning-tip { color: var(--muted); }
+
 .input-unit { position: relative; display: block; }
 .input-unit .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
 

@@ -16,13 +16,14 @@ const LAST_SYNC_KEY = 'splits_last_sync';
 const PROFILE_KEY = 'splits_profile'; // { name } — display only
 
 // Keep in step with CACHE_NAME in service-worker.js ('splits-' + APP_VERSION).
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 
 const RUN_LOG_PREVIEW = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TABS = ['today', 'plan', 'progress', 'profile'];
 
-const distanceLabels = { 5: '5K', 10: '10K', 21.1: 'Half marathon', 42.2: 'Marathon' };
+const distanceLabels = { 5: '5K', 10: '10K', 21.1: 'Half marathon', 42.2: 'Marathon', 50: '50K ultra', 100: '100K ultra' };
+const FITNESS_FORM_DEFAULT = 'light'; // pre-selected on the plan form; slightly cautious on purpose
 const typeLabels = { long: 'Long', quality: 'Quality', easy: 'Easy' };
 const typeLetters = { long: 'L', quality: 'Q', easy: 'E' };
 const PHASES = ['base', 'build', 'peak', 'taper'];
@@ -35,6 +36,8 @@ let openSession = null;          // { weekNumber, index, from } while session de
 const weekToggles = new Map();   // weekNumber -> expanded? (overrides the default: current week open)
 const scrollByView = {};
 let versionNote = '';            // e.g. "v7 available, reload"
+let levelTouched = false;        // has the runner picked an experience level, or is it still the suggestion?
+let warnedFor = null;            // form inputs (JSON) the short-timeline warning was shown for
 let updateState = 'idle';        // 'idle' | 'checking' | 'updating' — the Profile "Check for updates" button
 
 // Shows the version this page is running. If a newer service worker has
@@ -154,6 +157,14 @@ function timeAgo(ts) {
 
 function raceLabel(plan) {
   return distanceLabels[plan.goalDistance] || `${plan.goalDistance}K`;
+}
+
+function fitnessLabel(fitness) {
+  return PlanGenerator.FITNESS[PlanGenerator.fitnessOf(fitness)].label;
+}
+
+function levelLabel(experience) {
+  return PlanGenerator.LEVELS[PlanGenerator.levelOf(experience)].label;
 }
 
 function daysToRaceText(days) {
@@ -911,7 +922,9 @@ function renderProfile(plan) {
   edit.setAttribute('aria-label', 'Edit race goal');
   settings.append(
     row('Race goal', `${raceLabel(plan)} · ${raceDate} · ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}`, edit),
+    row('Experience', 'Change it with Edit above', el('span', 'value', levelLabel(plan.experience))),
     // Display-only until real preference screens exist.
+    row('Fitness', null, el('span', 'value', fitnessLabel(plan.fitness))),
     row('Units', null, el('span', 'value', 'Kilometres')),
     row('Rest day', null, el('span', 'value', 'Not set')),
     row('Notifications', null, el('span', 'value', 'Off')),
@@ -1117,6 +1130,70 @@ function editName() {
 
 // ------------------------------------------------------------ onboarding
 
+const LEVEL_HINTS = {
+  suggested: 'Suggested from your weekly volume — change it if it doesn\'t fit.',
+  chosen: 'Beginner plans build slower with shorter long runs; experienced plans build higher.',
+  saved: 'The level this plan was built for. Changing it rebuilds the plan.'
+};
+
+function formInputs() {
+  const checked = document.querySelector('input[name="experience"]:checked');
+  return {
+    goalDistance: document.getElementById('goalDistance').value,
+    raceDate: document.getElementById('raceDate').value,
+    currentVolume: document.getElementById('currentVolume').value,
+    runsPerWeek: document.getElementById('runsPerWeek').value,
+    experience: checked ? checked.value : PlanGenerator.DEFAULT_LEVEL,
+    fitness: (document.querySelector('input[name="fitness"]:checked') || {}).value || FITNESS_FORM_DEFAULT
+  };
+}
+
+// The fitness radio cards are built once from PlanGenerator.FITNESS.
+function buildFitnessChoices() {
+  const list = document.getElementById('fitnessList');
+  Object.entries(PlanGenerator.FITNESS).forEach(([key, f]) => {
+    const label = el('label');
+    const input = el('input');
+    input.type = 'radio';
+    input.name = 'fitness';
+    input.value = key;
+    const card = el('span', 'choice');
+    card.append(el('span', 'choice-title', f.label), el('span', 'choice-blurb', f.blurb));
+    label.append(input, card);
+    list.appendChild(label);
+  });
+}
+
+function setFitness(fitness) {
+  const radio = document.querySelector(`input[name="fitness"][value="${fitness}"]`);
+  if (radio) radio.checked = true;
+}
+
+function setLevel(level, hint) {
+  const radio = document.querySelector(`input[name="experience"][value="${level}"]`);
+  if (radio) radio.checked = true;
+  document.getElementById('levelHint').textContent = hint;
+}
+
+// The warning belongs to one set of inputs; any edit clears it.
+function clearPlanWarning() {
+  warnedFor = null;
+  document.getElementById('planWarning').hidden = true;
+  const submit = document.getElementById('planSubmit');
+  submit.textContent = submit.dataset.label;
+}
+
+function showPlanWarning(assessment) {
+  const box = document.getElementById('planWarning');
+  box.innerHTML = '';
+  assessment.warnings.forEach(text => box.appendChild(el('p', '', text)));
+  box.appendChild(el('p', 'warning-tip', 'You can change the race date or experience level, or build the plan anyway.'));
+  box.hidden = false;
+  const submit = document.getElementById('planSubmit');
+  submit.textContent = 'Build it anyway';
+  submit.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // keep the warning and its button on screen
+}
+
 function showOnboarding({ editing = false } = {}) {
   const plan = editing ? loadPlan() : null;
   if (plan) {
@@ -1124,12 +1201,22 @@ function showOnboarding({ editing = false } = {}) {
     document.getElementById('raceDate').value = plan.raceDate;
     document.getElementById('currentVolume').value = plan.startingVolume;
     document.getElementById('runsPerWeek').value = plan.runsPerWeek;
+    levelTouched = true;
+    setLevel(PlanGenerator.levelOf(plan.experience), LEVEL_HINTS.saved);
+    setFitness(PlanGenerator.fitnessOf(plan.fitness));
+  } else {
+    levelTouched = false;
+    setFitness(FITNESS_FORM_DEFAULT);
+    const { currentVolume, runsPerWeek } = formInputs();
+    setLevel(PlanGenerator.suggestLevel(currentVolume, runsPerWeek), LEVEL_HINTS.suggested);
   }
   document.querySelector('#onboarding .h1').textContent = plan ? 'Change race goal' : 'Build your plan';
   document.querySelector('#onboarding .lede').textContent = plan
     ? 'Splits will build a new plan from these settings. Progress on your current plan is replaced; synced runs are fetched again.'
     : "Tell Splits what you're training for. It lays out the weeks; you run them; it adjusts as you go.";
-  document.getElementById('planSubmit').textContent = plan ? 'Rebuild plan' : 'Generate plan';
+  const submit = document.getElementById('planSubmit');
+  submit.dataset.label = plan ? 'Rebuild plan' : 'Generate plan';
+  clearPlanWarning();
   document.getElementById('planCancel').hidden = !plan;
   showView('onboarding');
 }
@@ -1220,15 +1307,39 @@ function init() {
 
   document.getElementById('planCancel').addEventListener('click', () => showView('profile'));
 
-  document.getElementById('planForm').addEventListener('submit', e => {
+  buildFitnessChoices();
+  setFitness(FITNESS_FORM_DEFAULT);
+
+  // Until the runner picks a level themselves, keep suggesting one from volume.
+  const planForm = document.getElementById('planForm');
+  planForm.addEventListener('input', e => {
+    clearPlanWarning();
+    if (e.target.name === 'experience') {
+      levelTouched = true;
+      document.getElementById('levelHint').textContent = LEVEL_HINTS.chosen;
+    } else if (!levelTouched && (e.target.id === 'currentVolume' || e.target.id === 'runsPerWeek')) {
+      const { currentVolume, runsPerWeek } = formInputs();
+      setLevel(PlanGenerator.suggestLevel(currentVolume, runsPerWeek), LEVEL_HINTS.suggested);
+    }
+  });
+  planForm.addEventListener('change', clearPlanWarning);
+
+  planForm.addEventListener('submit', e => {
     e.preventDefault();
+    const inputs = formInputs();
+
+    // Too little time, or a long run that can't get where the race needs:
+    // say so once, then build it if they still want to.
+    const assessment = PlanGenerator.assess(inputs);
+    const signature = JSON.stringify(inputs);
+    if (assessment.warnings.length && warnedFor !== signature) {
+      showPlanWarning(assessment);
+      warnedFor = signature;
+      return;
+    }
+
     if (loadPlan() && !confirm('Replace your current plan? Progress on it will be lost.')) return;
-    const plan = PlanGenerator.generate({
-      goalDistance: document.getElementById('goalDistance').value,
-      raceDate: document.getElementById('raceDate').value,
-      currentVolume: document.getElementById('currentVolume').value,
-      runsPerWeek: document.getElementById('runsPerWeek').value
-    });
+    const plan = PlanGenerator.generate(inputs);
     savePlan(plan);
     saveRuns([]); // runs belong to the plan window they were fetched for
     openSession = null;

@@ -36,6 +36,8 @@
           <option value="10">10K</option>
           <option value="21.1" selected>Half marathon</option>
           <option value="42.2">Marathon</option>
+          <option value="50">50K ultra</option>
+          <option value="100">100K ultra</option>
         </select>
       </label>
 
@@ -53,6 +55,23 @@
         <span>Runs per week</span>
         <input type="number" id="runsPerWeek" min="2" max="7" value="4" required>
       </label>
+
+      <fieldset class="field level-field">
+        <legend>Experience</legend>
+        <div class="segmented" role="radiogroup" aria-describedby="levelHint">
+          <label><input type="radio" name="experience" value="beginner"><span>Beginner</span></label>
+          <label><input type="radio" name="experience" value="intermediate" checked><span>Intermediate</span></label>
+          <label><input type="radio" name="experience" value="experienced"><span>Experienced</span></label>
+        </div>
+        <p id="levelHint" class="hint"></p>
+      </fieldset>
+
+      <fieldset class="field level-field">
+        <legend>Outside running, how active are you?</legend>
+        <div id="fitnessList" class="choice-list"></div>
+      </fieldset>
+
+      <div id="planWarning" class="warning" role="alert" hidden></div>
 
       <button type="submit" id="planSubmit" class="btn btn-primary">Generate plan</button>
       <button type="button" id="planCancel" class="btn btn-ghost" hidden>Cancel</button>
