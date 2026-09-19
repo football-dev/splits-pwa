@@ -47,29 +47,28 @@
       </label>
 
       <label class="field">
-        <span>Current weekly volume (km)</span>
-        <input type="number" id="currentVolume" min="0" step="1" value="20" required>
+        <span>Longest run you can do comfortably now (km)</span>
+        <input type="number" id="startingDistance" min="0" max="60" step="0.5" value="5" required aria-describedby="startHint">
+        <p id="startHint" class="hint">Your longest recent run, or how far you can go without stopping. New to running? Enter 0 — we'll start you gently, with a long run of about 2 km in week 1.</p>
       </label>
 
       <label class="field">
-        <span>Runs per week</span>
-        <input type="number" id="runsPerWeek" min="2" max="7" value="4" required>
+        <span>Training days per week</span>
+        <input type="number" id="trainingDays" min="2" max="7" value="3" required aria-describedby="daysHint">
+        <p id="daysHint" class="hint">Days a week you can realistically run. 3 is a good start; more days build fitness faster and let the plan go further. (6 or 7 days is six runs and a rest day.)</p>
       </label>
 
       <fieldset class="field level-field">
         <legend>Experience</legend>
         <div class="segmented" role="radiogroup" aria-describedby="levelHint">
-          <label><input type="radio" name="experience" value="beginner"><span>Beginner</span></label>
-          <label><input type="radio" name="experience" value="intermediate" checked><span>Intermediate</span></label>
-          <label><input type="radio" name="experience" value="experienced"><span>Experienced</span></label>
+          <label><input type="radio" name="experience" value="beginner" checked><span>Beginner</span></label>
+          <label><input type="radio" name="experience" value="intermediate"><span>Intermediate</span></label>
+          <label><input type="radio" name="experience" value="advanced"><span>Advanced</span></label>
         </div>
         <p id="levelHint" class="hint"></p>
       </fieldset>
 
-      <fieldset class="field level-field">
-        <legend>Outside running, how active are you?</legend>
-        <div id="fitnessList" class="choice-list"></div>
-      </fieldset>
+      <section id="planPreview" class="preview" aria-live="polite" aria-label="Your plan at a glance" hidden></section>
 
       <div id="planWarning" class="warning" role="alert" hidden></div>
 

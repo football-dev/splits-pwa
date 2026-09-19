@@ -146,6 +146,7 @@ h2.eyebrow { margin: 0; font-weight: 400; }
 .chip.type-long { background: var(--accent-tint); color: var(--accent); }
 .chip.type-quality { background: var(--teal-tint); color: var(--teal); }
 .chip.type-easy { background: var(--easy-tint); color: var(--text-2); }
+.chip.type-medium { background: var(--easy-tint); color: var(--accent); }
 
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -260,6 +261,7 @@ h2.eyebrow { margin: 0; font-weight: 400; }
 .dot.type-long { background: var(--accent); border-color: var(--accent); }
 .dot.type-quality { background: var(--teal); border-color: var(--teal); }
 .dot.type-easy, .dot.type-extra { background: var(--faint); }
+.dot.type-medium { background: #C79A5B; border-color: #C79A5B; }
 .day-pill.future .dot { border-color: var(--line-2); }
 
 .sync-card {
@@ -597,27 +599,23 @@ h2.eyebrow { margin: 0; font-weight: 400; }
 }
 .segmented input:checked + span { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* Fitness question: four radio cards with a one-line description. */
-.choice-list { display: flex; flex-direction: column; gap: 6px; }
-.choice-list label { position: relative; display: block; }
-.choice-list input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.choice-list .choice {
+.hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* Live "plan at a glance" summary under the form. */
+.preview {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  min-height: 56px;
-  padding: 8px 14px;
-  background: var(--card);
-  border: 1px solid var(--line-2);
-  border-radius: 12px;
+  gap: 6px;
 }
-.choice-list .choice-title { font-size: 14px; color: var(--text); }
-.choice-list .choice-blurb { font-size: 12px; color: var(--muted); }
-.choice-list input:checked + .choice { background: var(--accent-tint); border-color: var(--accent); }
-.choice-list input:checked + .choice .choice-title { color: var(--accent); font-weight: 600; }
-.choice-list input:focus-visible + .choice { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.preview-title { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+.preview-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 14px; }
+.preview-row .k { color: var(--text-2); }
+.preview-row .v { font-family: var(--font-mono); font-weight: 500; text-align: right; }
+.preview-note { margin: 4px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.preview-flag { margin: 4px 0 0; font-size: 12px; line-height: 1.4; color: var(--accent); }
 
 .warning {
   background: var(--accent-tint);
@@ -631,6 +629,9 @@ h2.eyebrow { margin: 0; font-weight: 400; }
 .warning p { margin: 0; }
 .warning p + p { margin-top: 8px; }
 .warning .warning-tip { color: var(--muted); }
+.warning .warning-title { font-weight: 600; color: var(--accent); }
+.warning-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.warning-actions .btn { white-space: normal; text-align: center; }
 
 .input-unit { position: relative; display: block; }
 .input-unit .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }

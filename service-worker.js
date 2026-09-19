@@ -1,4 +1,4 @@
-const CACHE_NAME = 'splits-v9';
+const CACHE_NAME = 'splits-v10';
 const APP_SHELL = [
   './',
   './index.html',

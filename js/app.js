@@ -16,16 +16,15 @@ const LAST_SYNC_KEY = 'splits_last_sync';
 const PROFILE_KEY = 'splits_profile'; // { name } — display only
 
 // Keep in step with CACHE_NAME in service-worker.js ('splits-' + APP_VERSION).
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 const RUN_LOG_PREVIEW = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TABS = ['today', 'plan', 'progress', 'profile'];
 
 const distanceLabels = { 5: '5K', 10: '10K', 21.1: 'Half marathon', 42.2: 'Marathon', 50: '50K ultra', 100: '100K ultra' };
-const FITNESS_FORM_DEFAULT = 'light'; // pre-selected on the plan form; slightly cautious on purpose
-const typeLabels = { long: 'Long', quality: 'Quality', easy: 'Easy' };
-const typeLetters = { long: 'L', quality: 'Q', easy: 'E' };
+const typeLabels = { long: 'Long', medium: 'Medium-long', quality: 'Quality', easy: 'Easy' };
+const typeLetters = { long: 'L', medium: 'M', quality: 'Q', easy: 'E' };
 const PHASES = ['base', 'build', 'peak', 'taper'];
 
 let syncing = false;
@@ -159,10 +158,6 @@ function raceLabel(plan) {
   return distanceLabels[plan.goalDistance] || `${plan.goalDistance}K`;
 }
 
-function fitnessLabel(fitness) {
-  return PlanGenerator.FITNESS[PlanGenerator.fitnessOf(fitness)].label;
-}
-
 function levelLabel(experience) {
   return PlanGenerator.LEVELS[PlanGenerator.levelOf(experience)].label;
 }
@@ -181,13 +176,15 @@ function showToast(message) {
 
 // ------------------------------------------------------------ derived data
 
-// Effort zone is a display convention by session type (the plan data has no
-// zones): easy and long runs are conversational, steady is Z3, tempo Z4.
+// Effort zone is a display convention by workout (the plan data has no zones): easy,
+// medium-long and long runs are conversational (Z2); strides, hills and sharpening are
+// steady with short pickups (Z3); tempo, intervals and goal-pace work are hard (Z4).
 function effortFor(session) {
   if (session.type === 'quality') {
-    return /tempo|interval/i.test(session.name)
-      ? { zone: 4, label: 'hard effort' }
-      : { zone: 3, label: 'steady effort' };
+    const hard = session.workout
+      ? ['tempo', 'intervals', 'goal_pace_blocks', 'race_specific_intervals'].includes(session.workout)
+      : /tempo|interval/i.test(session.name); // plans saved before workouts were recorded
+    return hard ? { zone: 4, label: 'hard effort' } : { zone: 3, label: 'steady effort' };
   }
   return { zone: 2, label: 'easy effort' };
 }
@@ -481,6 +478,7 @@ function renderWeekCard(plan, runs, week, curWeek) {
   else if (expanded) summary = `${week.phase} · ${fmtKm(week.targetVolume)} km`;
   else if (when === 'past') summary = `${week.phase} · ${done}/${week.sessions.length} done · ${fmtKm(actual)}/${fmtKm(week.targetVolume)} km`;
   else summary = `${week.phase} · ${week.sessions.length} sessions · ${fmtKm(week.targetVolume)} km`;
+  if (week.deload) summary += ' · lighter week';
   if (week.adjusted) summary += ' · adjusted';
 
   const head = button('', 'week-head', () => {
@@ -924,7 +922,6 @@ function renderProfile(plan) {
     row('Race goal', `${raceLabel(plan)} · ${raceDate} · ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}`, edit),
     row('Experience', 'Change it with Edit above', el('span', 'value', levelLabel(plan.experience))),
     // Display-only until real preference screens exist.
-    row('Fitness', null, el('span', 'value', fitnessLabel(plan.fitness))),
     row('Units', null, el('span', 'value', 'Kilometres')),
     row('Rest day', null, el('span', 'value', 'Not set')),
     row('Notifications', null, el('span', 'value', 'Off')),
@@ -1131,8 +1128,8 @@ function editName() {
 // ------------------------------------------------------------ onboarding
 
 const LEVEL_HINTS = {
-  suggested: 'Suggested from your weekly volume — change it if it doesn\'t fit.',
-  chosen: 'Beginner plans build slower with shorter long runs; experienced plans build higher.',
+  suggested: "Suggested from your longest run — change it if it doesn't fit.",
+  chosen: 'Beginners build a little slower than intermediate runners, and advanced runners a little faster.',
   saved: 'The level this plan was built for. Changing it rebuilds the plan.'
 };
 
@@ -1141,38 +1138,65 @@ function formInputs() {
   return {
     goalDistance: document.getElementById('goalDistance').value,
     raceDate: document.getElementById('raceDate').value,
-    currentVolume: document.getElementById('currentVolume').value,
-    runsPerWeek: document.getElementById('runsPerWeek').value,
-    experience: checked ? checked.value : PlanGenerator.DEFAULT_LEVEL,
-    fitness: (document.querySelector('input[name="fitness"]:checked') || {}).value || FITNESS_FORM_DEFAULT
+    startingDistance: document.getElementById('startingDistance').value,
+    trainingDays: document.getElementById('trainingDays').value,
+    experience: checked ? checked.value : PlanGenerator.DEFAULT_LEVEL
   };
-}
-
-// The fitness radio cards are built once from PlanGenerator.FITNESS.
-function buildFitnessChoices() {
-  const list = document.getElementById('fitnessList');
-  Object.entries(PlanGenerator.FITNESS).forEach(([key, f]) => {
-    const label = el('label');
-    const input = el('input');
-    input.type = 'radio';
-    input.name = 'fitness';
-    input.value = key;
-    const card = el('span', 'choice');
-    card.append(el('span', 'choice-title', f.label), el('span', 'choice-blurb', f.blurb));
-    label.append(input, card);
-    list.appendChild(label);
-  });
-}
-
-function setFitness(fitness) {
-  const radio = document.querySelector(`input[name="fitness"][value="${fitness}"]`);
-  if (radio) radio.checked = true;
 }
 
 function setLevel(level, hint) {
   const radio = document.querySelector(`input[name="experience"][value="${level}"]`);
   if (radio) radio.checked = true;
   document.getElementById('levelHint').textContent = hint;
+}
+
+function fmtDateLong(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// The "plan at a glance" card: what the current answers would build.
+function updatePlanPreview() {
+  const box = document.getElementById('planPreview');
+  const inputs = formInputs();
+  if (!inputs.raceDate || !(Number(inputs.trainingDays) >= 2)) {
+    box.hidden = true;
+    return;
+  }
+  const d = PlanGenerator.design(inputs);
+  const entered = Math.max(0, Number(inputs.startingDistance) || 0);
+  box.innerHTML = '';
+  box.appendChild(el('h2', 'preview-title', 'Your plan at a glance'));
+  const row = (k, v) => {
+    const r = el('div', 'preview-row');
+    r.append(el('span', 'k', k), el('span', 'v', v));
+    box.appendChild(r);
+  };
+  row('Time to race day', `${Math.max(0, d.availableWeeks)} weeks`);
+
+  if (d.status === 'TOO_SHORT') {
+    box.appendChild(el('p', 'preview-flag', `${d.warnings[0]} You'll see your options when you build.`));
+    box.hidden = false;
+    return;
+  }
+
+  const s = d.summary;
+  row('Weekly distance', `${fmtKm(s.startVolume)} → ${fmtKm(s.peakVolume)} km`);
+  row('Longest run', `${fmtKm(s.peakLong)} km`);
+  const raceKm = Number(inputs.goalDistance);
+  if (s.peakLong < raceKm * 0.97 && s.peakLong >= raceKm * 0.7) {
+    // Plans deliberately stop short of race distance in training; say so, or it looks like a bug.
+    box.appendChild(el('p', 'preview-note',
+      `The longest training run builds to about ${Math.round((s.peakLong / raceKm) * 100)}% of the ${fmtKm(raceKm)} km race. That's normal: the taper and race day carry you the rest of the way.`));
+  }
+  if (entered < 3) {
+    box.appendChild(el('p', 'preview-note',
+      `You entered ${fmtKm(entered)} km, so week 1 starts with a ${fmtKm(d.plan.weeks[0].longRunKm)} km long run and builds from there.`));
+  }
+  if (d.status === 'AGGRESSIVE') {
+    box.appendChild(el('p', 'preview-flag', `${d.warnings[0]} You'll see the details when you build.`));
+  }
+  box.hidden = false;
 }
 
 // The warning belongs to one set of inputs; any edit clears it.
@@ -1183,10 +1207,11 @@ function clearPlanWarning() {
   submit.textContent = submit.dataset.label;
 }
 
-function showPlanWarning(assessment) {
+// AGGRESSIVE: a conservative plan is available; say what's tight and let them build it.
+function showPlanWarning(design) {
   const box = document.getElementById('planWarning');
   box.innerHTML = '';
-  assessment.warnings.forEach(text => box.appendChild(el('p', '', text)));
+  design.warnings.forEach(text => box.appendChild(el('p', '', text)));
   box.appendChild(el('p', 'warning-tip', 'You can change the race date or experience level, or build the plan anyway.'));
   box.hidden = false;
   const submit = document.getElementById('planSubmit');
@@ -1194,21 +1219,49 @@ function showPlanWarning(assessment) {
   submit.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // keep the warning and its button on screen
 }
 
+// TOO_SHORT: no race plan is built. Say why, and offer ways forward that can be acted on now.
+function showTooShort(design, inputs) {
+  const box = document.getElementById('planWarning');
+  box.innerHTML = '';
+  box.appendChild(el('p', 'warning-title', "We can't build a safe plan for that yet"));
+  design.warnings.forEach(text => box.appendChild(el('p', '', text)));
+
+  const actions = el('div', 'warning-actions');
+  if (design.suggestedDate) {
+    actions.appendChild(button(`Move the race to ${fmtDateLong(design.suggestedDate)}`, 'btn btn-ghost', () => {
+      const date = document.getElementById('raceDate');
+      date.value = design.suggestedDate;
+      date.dispatchEvent(new Event('input', { bubbles: true }));
+    }));
+  }
+  design.alternatives.forEach(alt => {
+    actions.appendChild(button(`Train for a ${alt.label} instead`, 'btn btn-ghost', () => {
+      const goal = document.getElementById('goalDistance');
+      goal.value = String(alt.goalKm);
+      goal.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('planPreview').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }));
+  });
+  if (actions.children.length) box.appendChild(actions);
+  box.appendChild(el('p', 'warning-tip',
+    'A run-walk plan aimed at finishing, not racing, is another route. If injury is a concern, check with a coach or clinician first.'));
+  box.hidden = false;
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function showOnboarding({ editing = false } = {}) {
   const plan = editing ? loadPlan() : null;
   if (plan) {
     document.getElementById('goalDistance').value = String(plan.goalDistance);
     document.getElementById('raceDate').value = plan.raceDate;
-    document.getElementById('currentVolume').value = plan.startingVolume;
-    document.getElementById('runsPerWeek').value = plan.runsPerWeek;
+    document.getElementById('startingDistance').value = savedStartingDistance(plan);
+    document.getElementById('trainingDays').value = plan.runsPerWeek;
     levelTouched = true;
     setLevel(PlanGenerator.levelOf(plan.experience), LEVEL_HINTS.saved);
-    setFitness(PlanGenerator.fitnessOf(plan.fitness));
   } else {
     levelTouched = false;
-    setFitness(FITNESS_FORM_DEFAULT);
-    const { currentVolume, runsPerWeek } = formInputs();
-    setLevel(PlanGenerator.suggestLevel(currentVolume, runsPerWeek), LEVEL_HINTS.suggested);
+    const { startingDistance, trainingDays } = formInputs();
+    setLevel(PlanGenerator.suggestLevel(startingDistance, trainingDays), LEVEL_HINTS.suggested);
   }
   document.querySelector('#onboarding .h1').textContent = plan ? 'Change race goal' : 'Build your plan';
   document.querySelector('#onboarding .lede').textContent = plan
@@ -1217,8 +1270,18 @@ function showOnboarding({ editing = false } = {}) {
   const submit = document.getElementById('planSubmit');
   submit.dataset.label = plan ? 'Rebuild plan' : 'Generate plan';
   clearPlanWarning();
+  updatePlanPreview();
   document.getElementById('planCancel').hidden = !plan;
   showView('onboarding');
+}
+
+// The longest run a plan started from. Plans saved before v10 recorded weekly volume instead,
+// so use that plan's first long run.
+function savedStartingDistance(plan) {
+  if (plan.startingDistanceKm !== undefined) return plan.startingDistanceKm;
+  const first = plan.weeks && plan.weeks[0];
+  const long = first && first.sessions.find(x => x.type === 'long');
+  return long ? long.distance : 0;
 }
 
 function startOver() {
@@ -1307,39 +1370,44 @@ function init() {
 
   document.getElementById('planCancel').addEventListener('click', () => showView('profile'));
 
-  buildFitnessChoices();
-  setFitness(FITNESS_FORM_DEFAULT);
-
-  // Until the runner picks a level themselves, keep suggesting one from volume.
+  // Until the runner picks a level themselves, keep suggesting one from their longest run.
   const planForm = document.getElementById('planForm');
   planForm.addEventListener('input', e => {
     clearPlanWarning();
     if (e.target.name === 'experience') {
       levelTouched = true;
       document.getElementById('levelHint').textContent = LEVEL_HINTS.chosen;
-    } else if (!levelTouched && (e.target.id === 'currentVolume' || e.target.id === 'runsPerWeek')) {
-      const { currentVolume, runsPerWeek } = formInputs();
-      setLevel(PlanGenerator.suggestLevel(currentVolume, runsPerWeek), LEVEL_HINTS.suggested);
+    } else if (!levelTouched && (e.target.id === 'startingDistance' || e.target.id === 'trainingDays')) {
+      const { startingDistance, trainingDays } = formInputs();
+      setLevel(PlanGenerator.suggestLevel(startingDistance, trainingDays), LEVEL_HINTS.suggested);
     }
+    updatePlanPreview();
   });
-  planForm.addEventListener('change', clearPlanWarning);
+  planForm.addEventListener('change', () => {
+    clearPlanWarning();
+    updatePlanPreview();
+  });
 
   planForm.addEventListener('submit', e => {
     e.preventDefault();
     const inputs = formInputs();
 
-    // Too little time, or a long run that can't get where the race needs:
-    // say so once, then build it if they still want to.
-    const assessment = PlanGenerator.assess(inputs);
+    // TOO_SHORT builds nothing and offers ways forward. AGGRESSIVE builds a conservative
+    // plan, but says what's tight once first; then they can build it.
+    const design = PlanGenerator.design(inputs);
+    if (design.status === 'TOO_SHORT') {
+      showTooShort(design, inputs);
+      return;
+    }
     const signature = JSON.stringify(inputs);
-    if (assessment.warnings.length && warnedFor !== signature) {
-      showPlanWarning(assessment);
+    if (design.status === 'AGGRESSIVE' && warnedFor !== signature) {
+      showPlanWarning(design);
       warnedFor = signature;
       return;
     }
 
     if (loadPlan() && !confirm('Replace your current plan? Progress on it will be lost.')) return;
-    const plan = PlanGenerator.generate(inputs);
+    const plan = design.plan;
     savePlan(plan);
     saveRuns([]); // runs belong to the plan window they were fetched for
     openSession = null;
