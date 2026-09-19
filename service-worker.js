@@ -1,4 +1,4 @@
-const CACHE_NAME = 'splits-v6';
+const CACHE_NAME = 'splits-v7';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,7 +14,10 @@ const APP_SHELL = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    // cache: 'reload' skips the browser's HTTP cache, so a new version
+    // never gets filled with stale copies of the old files.
+    caches.open(CACHE_NAME).then(cache =>
+      cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' }))))
   );
   self.skipWaiting();
 });

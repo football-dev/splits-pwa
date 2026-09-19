@@ -16,7 +16,7 @@ const LAST_SYNC_KEY = 'splits_last_sync';
 const PROFILE_KEY = 'splits_profile'; // { name } — display only
 
 // Keep in step with CACHE_NAME in service-worker.js ('splits-' + APP_VERSION).
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 
 const RUN_LOG_PREVIEW = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,6 +35,7 @@ let openSession = null;          // { weekNumber, index, from } while session de
 const weekToggles = new Map();   // weekNumber -> expanded? (overrides the default: current week open)
 const scrollByView = {};
 let versionNote = '';            // e.g. "v7 available, reload"
+let updateState = 'idle';        // 'idle' | 'checking' | 'updating' — the Profile "Check for updates" button
 
 // Shows the version this page is running. If a newer service worker has
 // already taken over the cache, flag that a reload is needed to pick it up.
@@ -913,15 +914,13 @@ function renderProfile(plan) {
     // Display-only until real preference screens exist.
     row('Units', null, el('span', 'value', 'Kilometres')),
     row('Rest day', null, el('span', 'value', 'Not set')),
-    row('Notifications', null, el('span', 'value', 'Off'))
+    row('Notifications', null, el('span', 'value', 'Off')),
+    row('App version', `Splits ${APP_VERSION}${versionNote ? ` · ${versionNote}` : ''}`, updateButton())
   );
   root.appendChild(settings);
 
   const footer = el('div', 'profile-footer');
-  footer.append(
-    button('Start over', 'btn btn-ghost', startOver),
-    el('div', 'app-version', `Splits ${APP_VERSION}${versionNote ? ` · ${versionNote}` : ''}`)
-  );
+  footer.append(button('Start over', 'btn btn-ghost', startOver));
   root.appendChild(footer);
 }
 
@@ -960,6 +959,75 @@ function renderHealthCard() {
   }
   card.appendChild(actions);
   return card;
+}
+
+// ------------------------------------------------------------ app updates
+
+function updateButton() {
+  const label = updateState === 'checking' ? 'Checking…'
+    : updateState === 'updating' ? 'Updating…'
+      : 'Check for updates';
+  const btn = button(label, 'btn-text', checkForUpdate);
+  btn.disabled = updateState !== 'idle';
+  return btn;
+}
+
+function setUpdateState(state) {
+  updateState = state;
+  const plan = loadPlan();
+  if (plan) renderProfile(plan);
+}
+
+// The version the server has now, read from CACHE_NAME in service-worker.js.
+async function latestVersion() {
+  const res = await fetch(`service-worker.js?check=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`service-worker.js: ${res.status}`);
+  const match = (await res.text()).match(/CACHE_NAME\s*=\s*'splits-([^']+)'/);
+  return match ? match[1] : null;
+}
+
+async function checkForUpdate() {
+  setUpdateState('checking');
+  let latest;
+  try {
+    latest = await latestVersion();
+  } catch (err) {
+    console.error(err);
+    setUpdateState('idle');
+    showToast("Couldn't check for updates — are you online?");
+    return;
+  }
+  if (!latest || latest === APP_VERSION) {
+    setUpdateState('idle');
+    showToast(`Splits is up to date (${APP_VERSION})`);
+    return;
+  }
+  setUpdateState('updating');
+  showToast(`Updating to ${latest}…`);
+  await applyUpdate();
+}
+
+// Drops the offline copy and reloads from the network. Plan, runs and the
+// Google Health token live in localStorage and are not touched.
+async function applyUpdate() {
+  try {
+    if ('serviceWorker' in navigator) {
+      for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
+    }
+    if (window.caches) {
+      for (const key of await caches.keys()) if (key.startsWith('splits-')) await caches.delete(key);
+    }
+    // Refresh the browser's HTTP cache too, so the reload can't pick up stale files.
+    const sameOrigin = url => new URL(url, location.href).origin === location.origin;
+    const files = [
+      location.href.split('#')[0],
+      ...[...document.scripts].map(s => s.src),
+      ...[...document.querySelectorAll('link[rel="stylesheet"], link[rel="manifest"]')].map(l => l.href)
+    ].filter(url => url && sameOrigin(url));
+    await Promise.all(files.map(url => fetch(url, { cache: 'reload' }).catch(() => {})));
+  } finally {
+    location.reload();
+  }
 }
 
 // ------------------------------------------------------------ bottom sheet

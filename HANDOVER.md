@@ -187,8 +187,15 @@ hides the tab bar.
   synced, disabled for future weeks.
 - **Profile:** name (tap to edit), Google Health card (status, last synced, Sync now / Disconnect or
   Connect), settings (Race goal → Edit reopens the form pre-filled and rebuilds the plan; Units, Rest day,
-  Notifications are display-only), **Start over**, and the version string (`Splits v6`, or
-  `v6 · v7 available, reload` when a newer service-worker cache is active).
+  Notifications are display-only), **App version** row with **Check for updates** (below), and
+  **Start over**.
+- **Check for updates** (Profile, added in v7): fetches `service-worker.js` with `no-store` and reads
+  its `CACHE_NAME`. If that version matches `APP_VERSION` it shows "Splits is up to date". If not, it
+  unregisters the service worker, deletes the `splits-*` caches, re-fetches the page's own scripts,
+  stylesheet and manifest with `cache: 'reload'` (so the browser's HTTP cache can't serve stale
+  copies), then reloads. localStorage (plan, runs, Google token, name) is untouched. It only detects a
+  release if the version was bumped (§8.1). The service worker's install step also fetches with
+  `cache: 'reload'` from v7 on.
 
 **Behaviour carried over from `707ddbe` unchanged:** sync re-entrancy guard and re-reading the plan
 after the network call; "last synced" refreshing every 30 s; streak = trailing completed sessions with
@@ -305,7 +312,7 @@ And to run the app's own path: `HealthSync.fetchRecentRuns('2026-08-01').then(co
 2. **Bump the version in two places together:**
    - `APP_VERSION` in `js/app.js` (e.g. `'v7'`)
    - `CACHE_NAME` in `service-worker.js` (`'splits-v7'`)
-   The service worker is **cache-first**, so without a new `CACHE_NAME` returning users keep the old files. The version string in Profile flags a mismatch.
+   The service worker is **cache-first**, so without a new `CACHE_NAME` returning users keep the old files. The App version row in Profile flags a mismatch, and **Check for updates** only sees a release whose `CACHE_NAME` changed.
 3. If you add a JS file, also add it to `APP_SHELL` in `service-worker.js` and a `<script>` tag in `index.html` (in dependency order).
 4. Commit and push to `main`. Pages redeploys in about a minute.
 5. Check the build finished and the live site matches:
@@ -317,7 +324,8 @@ And to run the app's own path: `HealthSync.fetchRecentRuns('2026-08-01').then(co
 ### 8.2 Seeing the new version in a browser
 
 Clear the old service worker: DevTools → Application → Clear site data (or Unregister), then
-hard-refresh. The version string at the bottom of the Profile tab should show the new `APP_VERSION`.
+hard-refresh. On a phone, or anywhere without DevTools, use **Profile → Check for updates**. The
+App version row in Profile should show the new `APP_VERSION`.
 
 ### 8.3 Local preview
 
