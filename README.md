@@ -46,17 +46,21 @@ then on.
 
 ## Connecting Google Health
 
-1. Register an app at the Google Health / Fitbit developer console to
-   get a `CLIENT_ID`. Choose the client-side / PKCE app type — this app
-   has no backend to hold a secret.
-2. In `js/healthSync.js`, set `CLIENT_ID` and check `REDIRECT_URI`
-   matches whatever HTTPS URL you deployed to (must match exactly what
-   you register).
-3. Confirm `AUTH_ENDPOINT`, `TOKEN_ENDPOINT`, and `API_BASE` against
-   the current Google Health API docs. These are scaffolded from the
-   legacy Fitbit Web API shape (Google Health's API is the same family,
-   rebranded in 2026) — worth double-checking nothing's moved before
-   you rely on it.
+1. In Google Cloud Console, create an OAuth client of type **Web
+   application** and add your deployed origin (e.g.
+   `https://football-dev.github.io`) under Authorised JavaScript
+   origins. This app signs in with Google Identity Services, so no
+   redirect URI or client secret is involved.
+2. In `js/healthSync.js`, set `CLIENT_ID`.
+3. Sign-in gives an access token that lasts about an hour, with no
+   refresh token. When it expires the app clears it and the button
+   goes back to "Connect Google Health".
+4. Confirm `API_BASE` and the endpoint in `fetchRecentRuns()` against
+   the current Google Health API docs. They're scaffolded from the
+   legacy Fitbit Web API shape and haven't been verified.
+5. On your iPhone: Apple Watch → Apple Health (records the run,
+   including GPS) → Google Health (via the Apple Health sync you've
+   already set up) → this app pulls it in via the API.
 4. On your iPhone: Apple Watch → Apple Health (records the run,
    including GPS) → Google Health (via the Apple Health sync you've
    already set up) → this app pulls it in via the API.

@@ -142,12 +142,24 @@ async function syncRuns(plan) {
     if (adjusted) showToast('Plan adjusted after a missed long run');
   } catch (err) {
     console.error(err);
+    if (err.code === 'token_expired') return; // onChange already told the user
     showToast('Could not sync with Google Health');
   }
 }
 
 async function init() {
-  await HealthSync.handleRedirectIfPresent();
+  HealthSync.onChange(({ reason, error }) => {
+    updateConnectButton();
+    if (error) {
+      showToast('Could not connect to Google Health');
+    } else if (reason === 'expired') {
+      showToast('Google Health session expired — tap Connect Google Health');
+    } else if (HealthSync.isConnected()) {
+      showToast('Google Health connected');
+      const plan = loadPlan();
+      if (plan) syncRuns(plan);
+    }
+  });
   updateConnectButton();
 
   document.getElementById('connectBtn').addEventListener('click', () => {
@@ -156,7 +168,12 @@ async function init() {
       updateConnectButton();
       showToast('Disconnected from Google Health');
     } else {
-      HealthSync.beginAuth();
+      try {
+        HealthSync.beginAuth();
+      } catch (err) {
+        console.error(err);
+        showToast(err.message);
+      }
     }
   });
 
