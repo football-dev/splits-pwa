@@ -16,7 +16,7 @@ const LAST_SYNC_KEY = 'splits_last_sync';
 const PROFILE_KEY = 'splits_profile'; // { name } — display only
 
 // Keep in step with CACHE_NAME in service-worker.js ('splits-' + APP_VERSION).
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 
 const RUN_LOG_PREVIEW = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;

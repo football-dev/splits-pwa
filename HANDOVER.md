@@ -1,6 +1,6 @@
 # Splits — handover
 
-Snapshot as of **2026-09-19**, at **v8** on `main` (experience-weighted plans; the commit before it is `ce011b8`). Everything described
+Snapshot as of **2026-09-19**, at **v9** on `main` (the v8 experience/fitness weighting plus the ramp fix; v8 is `466835e`). Everything described
 here as "built" is committed and pushed; anything not yet done is listed under
 [Open items](#7-open-items-and-risks).
 
@@ -36,7 +36,8 @@ Everything is stored in the browser's `localStorage`: one device, no account.
 | `de60423` | **UI redesign (v6):** single long scroll replaced by a bottom-tabbed app (Today / Plan / Progress / Profile) plus a session-detail screen, on new design tokens. Plan and sync logic unchanged. Brief: [`docs/redesign-brief.md`](docs/redesign-brief.md). |
 
 | `ce011b8` | **v7:** Profile → App version → **Check for updates**; the service worker installs with `cache: 'reload'`. |
-| *(v8)* | **Experience- and fitness-weighted plans:** Beginner / Intermediate / Experienced selector and an "outside running, how active are you?" question on the plan form; level- and fitness-aware long runs, volume growth and recovery weeks; short-timeline warnings; 50K and 100K ultra races (§5.5). |
+| `466835e` | **v8 — experience- and fitness-weighted plans:** Beginner / Intermediate / Experienced selector and an "outside running, how active are you?" question on the plan form; level- and fitness-aware long runs, volume growth and recovery weeks; short-timeline warnings; 50K and 100K ultra races (§5.5). |
+| *(v9)* | **Ramp fix.** v8 flattened the build: a 32-week half marathon for a 20 km-a-week runner climbed only 20 → 34.5 km with a 13.5 km longest run (old algorithm: 20 → 39.5, 18 km). Fixed the intermediate long-run cap bug, stopped fitness shrinking the destination, loosened the peak-volume cap, and made weeks add up exactly (§5.5). |
 
 GitHub Pages was already enabled (source `main`, path `/`) the first time it was checked. Each push
 to `main` redeploys in about a minute (§8.1).
@@ -49,11 +50,11 @@ to `main` redeploys in about a minute (§8.1).
 |---|---:|---|
 | `index.html` | 137 | App shell: onboarding form, one empty `<section data-view>` per screen, bottom tab bar, the reusable bottom sheet (`<dialog>`), toast. Loads fonts and scripts in order (below). |
 | `css/styles.css` | 675 | Design tokens on `:root` (dark `#12181C`, accent orange `#E08D3C`, teal `#3FA796`); Fraunces for headings, IBM Plex Sans for body, JetBrains Mono for numbers. |
-| `js/planGenerator.js` | 267 | Rules-based plan generation, weighted by running experience and general fitness; `assess()` for pre-build warnings; `suggestLevel()`. Races: 5K, 10K, half, marathon, 50K and 100K ultras. See §5.5. |
+| `js/planGenerator.js` | 279 | Rules-based plan generation, weighted by running experience and general fitness; `assess()` for pre-build warnings; `suggestLevel()`. Races: 5K, 10K, half, marathon, 50K and 100K ultras. See §5.5. |
 | `js/planStats.js` | 253 | **Pure** plan/run maths — no DOM, no network. Reconcile, streak, weekly series, run log, `weekStart`. Added in `707ddbe`. |
 | `js/healthSync.js` | 213 | Google auth (GIS) and Google Health API calls. |
 | `js/app.js` | 1368 | Storage, view switching (`showView`), rendering of every screen, sheet, sync, event wiring. |
-| `service-worker.js` | 40 | Cache-first app shell (`splits-v8`). Cross-origin requests bypass it. |
+| `service-worker.js` | 40 | Cache-first app shell (`splits-v9`). Cross-origin requests bypass it. |
 | `manifest.json`, `icons/` | — | PWA install metadata (iOS Add to Home Screen). |
 | `README.md` | 88 | Setup notes. Google Health section was updated in `81b7d92` and `adf2198`. |
 | `docs/redesign-brief.md` | — | The design brief the v6 UI was built from, plus how the build departed from it. |
@@ -221,7 +222,7 @@ window plus manual completions; run-log tags (`Wk N · <session>`, `Extra run`, 
 - *Colours:* session types use the accent colours (long = orange, quality = teal, easy = grey);
   done = teal, missed = `#C96A5B`.
 
-### 5.5 Plan generation: experience, fitness and races (v8)
+### 5.5 Plan generation: experience, fitness and races (v8, ramp fixed in v9)
 
 `PlanGenerator.generate({ goalDistance, raceDate, currentVolume, runsPerWeek, experience, fitness })`
 builds the plan. `experience` is one of `LEVELS` (`beginner`, `intermediate`, `experienced`; default
@@ -229,10 +230,17 @@ builds the plan. `experience` is one of `LEVELS` (`beginner`, `intermediate`, `e
 `planGenerator.js`, so tuning is a data change. Missing values fall back to the defaults, which
 reproduce the behaviour of a plan built before the option existed.
 
+**The shape of a plan.** Weekly volume and the long run climb from where the runner is now to a
+*destination* set by the race and level (peak long run, and the weekly volume that carries it), with a
+lighter recovery week every 3rd or 4th week, then taper. The climb is linear across the build, so the
+peak lands in the last build week. **Time governs the destination:** the growth ceiling (below) limits
+how far a runner can get in the weeks available, so a long timeline reaches the full destination and a
+short one is limited (and warned). Do not shrink the destination to make a plan "easier": that is what
+flattened v8.
+
 **Principle: experience sets how far, fitness sets how fast.** Running experience limits the ceiling
 (long runs and tendons adapt slowly whatever your general fitness); general fitness (job, gym, sport)
-scales how quickly and how ambitiously the plan climbs to it. Current volume anchors both: a plan never
-aims for more than 2.5× (or +12 km) what the runner does now.
+mostly scales how quickly the plan climbs to it, and only mildly how high. Current volume anchors both.
 
 **What a running-experience level changes**
 
@@ -240,38 +248,46 @@ aims for more than 2.5× (or +12 km) what the runner does now.
 |---|---|---|---|
 | Peak long run: 5K / 10K / half / marathon / 50K / 100K (km) | 6 / 10 / 14 / 28 / 30 / 34 | 8 / 14 / 18 / 32 / 35 / 40 | 10 / 16 / 21 / 35 / 38 / 45 |
 | First long run (share of current weekly volume) | 40% | 40% | 30% |
-| Longest a long run may be (share of that week)* | 50% | 40% | 35% |
-| Weekly volume growth ceiling (compounded, per non-recovery week) | 7% | 9% | 10% |
-| Wanted peak volume | max(1.4× current, 2.5× peak long run) | max(1.5×, 2.2×) | max(1.4×, 3.2×) |
+| Longest a long run may be (share of that week)* | 50% | 46% | 35% |
+| Weekly volume growth ceiling (compounded, per non-recovery week) | 8% | 10% | 11% |
+| Wanted peak volume | max(1.4× current, 2.0× peak long run) | max(1.5×, 2.2×) | max(1.4×, 3.2×) |
 | Recovery week (×0.8 volume, ×0.85 long run) | every 3rd | every 4th | every 4th |
 | Minimum sensible weeks: 5K / 10K / half / marathon / 50K / 100K | 8 / 14 / 20 / 24 / 30 / 40 | 6 / 8 / 12 / 18 / 22 / 30 | 6 / 6 / 8 / 14 / 16 / 24 |
 
+**Invariant:** `ratio × longCap ≥ 1` for every level (2.0×0.5, 2.2×0.46, 3.2×0.35), otherwise the
+peak volume can't carry the peak long run and the plan never reaches its own target. v8 had intermediate
+at 2.2 × 0.40 = 0.88, so intermediate long runs stopped at ~16 km instead of 18. A test enforces it.
+
 \* Never tighter than `1.5 / runsPerWeek` (a long run is naturally ~50% of a 3-run week, ~30% of a
-5-run week). Without this an experienced runner on 3 runs a week got a *shorter* long run than a beginner.
+5-run week).
 
 **What a fitness level changes** (multipliers on the level's numbers)
 
 | | Mostly sedentary | Lightly active | Active | Very active |
 |---|---|---|---|---|
 | Blurb on the form | Desk job, little other exercise | Some walking or the odd session | Exercise 2–3 days a week | Train 4+ days a week (gym, sport, running) |
-| Growth ceiling | ×0.6 | ×0.8 | ×1 | ×1.2 |
-| Peak volume (wanted and cap) | ×0.8 | ×0.9 | ×1 | ×1.1 |
-| Peak long run | ×0.9 | ×0.95 | ×1 | ×1 |
+| Growth ceiling (the main effect) | ×0.75 | ×0.9 | ×1 | ×1.15 |
+| Peak volume (wanted and cap) | ×0.90 | ×0.95 | ×1 | ×1.05 |
+| Peak long run | ×0.95 | ×1 | ×1 | ×1 |
 | Recovery week | every 3rd at most | every 4th | every 4th | every 4th |
 | Minimum weeks | ×1.25 | ×1.1 | ×1 | ×0.9 |
 
 Recovery cadence is the more cautious of the level's and the fitness's. On the plan form the fitness
-question starts on **Lightly active** (deliberately a little cautious; people tend to overrate
-themselves). `Active` is the internal default for saved plans and code that doesn't pass a value.
+question starts on **Lightly active** (slightly cautious, because people tend to overrate themselves).
+`Active` is the internal default for saved plans and code that doesn't pass a value.
 
 **Rules that apply at every level**
 
-- **Current fitness anchors the plan.** Peak weekly volume never exceeds
-  `max(2.5 × current, current + 12 km) × fitness peak factor`, and never falls below current volume.
-  There is also an absolute ceiling per race, `RACE_PEAK_MAX`: 60 / 80 / 100 / 120 / 130 / 145 km a week
-  for 5K / 10K / half / marathon / 50K / 100K.
-- **Sessions add up to the week.** A week's `targetVolume` is the sum of its session distances, so the
-  chart, the week summary and the rows always agree. Every session is at least 2 km.
+- **Growth ceiling** = `max(current × (1 + growth × fitness)^growthWeeks, current + 0.8 × fitness × growthWeeks)`,
+  where `growthWeeks` counts the non-recovery build weeks (the additive term lets a runner starting from
+  almost nothing still build).
+- **Peak volume** = `min(wanted × fitness peak, growth ceiling, safety cap, race ceiling)`, never below
+  current volume. The safety cap is `max(3 × current, current + 20 km) × fitness peak` (loose on purpose:
+  the growth ceiling is the real brake). `RACE_PEAK_MAX` is the absolute ceiling per race: 60 / 80 / 100
+  / 120 / 130 / 145 km a week for 5K / 10K / half / marathon / 50K / 100K.
+- **Sessions add up to the week, exactly.** A week's `targetVolume` is the sum of its session
+  distances, and each week's sessions add up to the planned volume (rounding is put on the last short
+  run), so a rising plan can't wobble from rounding. Every session is at least 2 km.
 - **Session mix is the same at every level and race:** one long run, one quality run (`Steady run` in
   base, `Tempo / intervals` after; none in a 2-run taper) and easy runs sharing the rest, roughly equal
   with the quality run ~15% longer. (An explicit decision: experience changes distances and recovery
@@ -290,15 +306,15 @@ and keeps updating it as volume and runs change, until the runner picks a level 
 **Warnings.** `PlanGenerator.assess(inputs)` builds the plan and returns
 `{ level, weeks, minWeeks, peakLong, targetLong, warnings[] }`. `minWeeks` and `targetLong` include the
 fitness factors. There are two warnings: fewer weeks than `minWeeks` for that level, fitness and race,
-and a longest run below 80% of the target (the volume cap stopped it getting there). The form shows
-them once, in a box above the button, which becomes **Build it anyway**; changing any input clears the
+and a longest run below 80% of the target (the limits stopped it getting there). The form shows them
+once, in a box above the button, which becomes **Build it anyway**; changing any input clears the
 warning. Nothing is blocked. `weeksUntil()` floors the length at 6 weeks, so a race closer than that is
 planned as 6 weeks.
 
-**Example (half marathon, 29 weeks, 3 runs a week, 8 km a week now):** beginner + sedentary peaks at
-16 km a week with an 8 km long run; beginner + very active at 22 km with 11 km; experienced + very
-active also 22 km with 11 km (current volume, not experience, is the limit there). At 20 km a week an
-intermediate runner peaks at 29 km if sedentary and 43.5 km if very active.
+**Example: half marathon, 32 weeks, 4 runs a week, 20 km a week now, intermediate.** Lightly active
+(the form default): volume 20 → 37.5 km, long run 8 → 17.5 km. Active: 20 → 39.5 and 8 → 18. For
+comparison, the pre-v8 algorithm gave 20 → 39.5 and 9 → 18, and v8 gave only 20 → 34.5 and 8 → 13.5.
+A beginner starting at 10 km a week on 3 runs, lightly active, gets 10 → 26.5 km and 4 → 13.5 km.
 
 ---
 
@@ -338,24 +354,29 @@ the syncing state shows in Profile; future weeks have no Mark done; accordion ex
 Cancel; Start over → onboarding → new plan; no horizontal overflow; no left-border accents; no console
 errors. **Not tested:** Safari/iOS itself, and real Google sign-in from the home-screen app.
 
-**v8 experience, fitness and ultras:** a throwaway Node script (not in the repo) generated 1,728 plans
-(3 levels × 4 fitness levels × 6 races × 6 runner profiles × 5 lengths, including 0 km and 2-run edge
-cases) and asserted: every session ≥ 2 km with the right number of runs and no NaN; sessions sum to the
-week; long run within the level's share (+ rounding); peak volume within the cap scaled by fitness;
-peak volume and longest run rise beginner < intermediate < experienced for one runner; at each level,
-peak volume rises sedentary < light < active < very active and the longest run never falls; recovery
-weeks fall on 3, 6, 9… for beginners and sedentary runners; one quality run per week; a 5 km-a-week
-beginner gets a 6 km first week (was 15 km); "active" is identical to passing no fitness; the
-experienced low-volume runner's long run is not shorter than a beginner's; the sedentary beginner is
-gentler than the very active experienced runner; `suggestLevel` at its thresholds; longest run rises
-marathon < 50K < 100K at every level; `assess` warns for a beginner half in 14 weeks, a beginner
-marathon from 15 km, a sedentary beginner 100K, and a sedentary-intermediate half in 16 weeks (but not
-a very active one), and is quiet for realistic experienced ultra plans. In the browser pane (390×844):
-the selector pre-selects from volume as it is typed and stops once overridden; the fitness cards
-render with "Lightly active" selected; the warning appears once, clears on any edit, and "Build it
-anyway" builds the plan with `experience` and `fitness` saved; Race goal → Edit pre-fills both; a
-50K ultra plan builds for an experienced, very active runner and shows as "50K ultra plan"; Profile shows
-Experience and Fitness rows.
+**v8/v9 experience, fitness, ultras and the ramp:** a throwaway Node script (not in the repo)
+generated 2,160 plans (3 levels × 4 fitness levels × 6 races × 6 runner profiles × 5 lengths, including
+0 km and 2-run edge cases) and asserted: every session ≥ 2 km with the right number of runs and no NaN;
+sessions sum to the week; long run within the level's share (+ rounding); peak volume within the cap
+scaled by fitness; peak volume and longest run rise beginner < intermediate < experienced; at each
+level, peak volume rises sedentary < light < active < very active and the longest run never falls;
+recovery weeks fall on 3, 6, 9… for beginners and sedentary runners; one quality run per week; a 5 km-a-week
+beginner gets a 6 km first week (was 15 km); "active" is identical to passing no fitness; an experienced
+low-volume runner's long run is not shorter than a beginner's; a sedentary beginner is gentler than a
+very active experienced runner; `suggestLevel` at its thresholds; the longest run rises marathon < 50K <
+100K at every level; `assess` warns for a beginner half in 14 weeks, a beginner marathon from 10 km, a
+sedentary beginner 100K, and a sedentary-intermediate half in 13 weeks (but not a very active one), and
+is quiet for realistic experienced ultra plans. **Ramp shape (added in v9):** outside recovery weeks,
+weekly volume and the long run never fall during the build; any plan that grows peaks in the last
+quarter of the build (12+ weeks); `ratio × longCap ≥ 1` for every level; and a 32-week half marathon at
+every fitness level for beginner (10 km/wk), intermediate (20 and 30) and experienced (45) runners
+reaches at least 90% of the level's target long run (75% for a sedentary beginner), and more than 1.3×
+its first long run. In the browser pane (390×844): the selector pre-selects from volume as it is typed
+and stops once overridden; the fitness cards render with "Lightly active" selected; the warning appears
+once, clears on any edit, and "Build it anyway" builds the plan with `experience` and `fitness` saved;
+Race goal → Edit pre-fills both; a 50K ultra plan builds and shows as "50K ultra plan"; Profile shows
+Experience and Fitness rows; a 32-week half marathon (20 km/wk, lightly active) builds with no warning
+and the Progress chart climbs to the peak week before the taper.
 
 **Not verified on real data:** everything past the API call for an actual run. See below.
 
@@ -427,8 +448,8 @@ And to run the app's own path: `HealthSync.fetchRecentRuns('2026-08-01').then(co
 
 1. Edit the files. Syntax-check with `node --check js/*.js service-worker.js`.
 2. **Bump the version in two places together:**
-   - `APP_VERSION` in `js/app.js` (e.g. `'v9'`)
-   - `CACHE_NAME` in `service-worker.js` (`'splits-v9'`)
+   - `APP_VERSION` in `js/app.js` (e.g. `'v10'`)
+   - `CACHE_NAME` in `service-worker.js` (`'splits-v10'`)
    The service worker is **cache-first**, so without a new `CACHE_NAME` returning users keep the old files. The App version row in Profile flags a mismatch, and **Check for updates** only sees a release whose `CACHE_NAME` changed.
 3. If you add a JS file, also add it to `APP_SHELL` in `service-worker.js` and a `<script>` tag in `index.html` (in dependency order).
 4. Commit and push to `main`. Pages redeploys in about a minute.

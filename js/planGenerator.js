@@ -19,25 +19,27 @@ const PlanGenerator = (() => {
   // longCap: longest a long run may be, as a share of that week's volume.
   // growth: ceiling on weekly volume growth (compounded, per non-recovery week).
   // peakMult / ratio: wanted peak volume = max(current * peakMult, longPeak * ratio).
+  //   ratio must be at least 1 / longCap, or the peak volume can't carry the peak
+  //   long run and the plan never reaches its own target.
   // stepEvery: every Nth week is a lighter recovery week.
   // minWeeks: rule-of-thumb shortest sensible plan, by race distance.
   // Race distances are in km: 5, 10, 21.1 (half), 42.2 (marathon), 50 and 100 (ultras).
   const LEVELS = {
     beginner: {
       label: 'Beginner',
-      longStart: 0.40, longCap: 0.50, growth: 0.07, peakMult: 1.4, ratio: 2.5, stepEvery: 3,
+      longStart: 0.40, longCap: 0.50, growth: 0.08, peakMult: 1.4, ratio: 2.0, stepEvery: 3,
       longPeak: { 5: 6, 10: 10, 21.1: 14, 42.2: 28, 50: 30, 100: 34 },
       minWeeks: { 5: 8, 10: 14, 21.1: 20, 42.2: 24, 50: 30, 100: 40 }
     },
     intermediate: {
       label: 'Intermediate',
-      longStart: 0.40, longCap: 0.40, growth: 0.09, peakMult: 1.5, ratio: 2.2, stepEvery: 4,
+      longStart: 0.40, longCap: 0.46, growth: 0.10, peakMult: 1.5, ratio: 2.2, stepEvery: 4,
       longPeak: { 5: 8, 10: 14, 21.1: 18, 42.2: 32, 50: 35, 100: 40 },
       minWeeks: { 5: 6, 10: 8, 21.1: 12, 42.2: 18, 50: 22, 100: 30 }
     },
     experienced: {
       label: 'Experienced',
-      longStart: 0.30, longCap: 0.35, growth: 0.10, peakMult: 1.4, ratio: 3.2, stepEvery: 4,
+      longStart: 0.30, longCap: 0.35, growth: 0.11, peakMult: 1.4, ratio: 3.2, stepEvery: 4,
       longPeak: { 5: 10, 10: 16, 21.1: 21, 42.2: 35, 50: 38, 100: 45 },
       minWeeks: { 5: 6, 10: 6, 21.1: 8, 42.2: 14, 50: 16, 100: 24 }
     }
@@ -50,17 +52,20 @@ const PlanGenerator = (() => {
   // long run (down only), shifts the recovery cadence, and stretches or shortens
   // the suggested minimum weeks.
   const FITNESS = {
-    sedentary: { label: 'Mostly sedentary',  blurb: 'Desk job, little other exercise', growth: 0.6, peak: 0.8, long: 0.9,  minWeeks: 1.25, stepEvery: 3 },
-    light:     { label: 'Lightly active',    blurb: 'Some walking or the odd session', growth: 0.8, peak: 0.9, long: 0.95, minWeeks: 1.1,  stepEvery: 4 },
-    active:    { label: 'Active',            blurb: 'Exercise 2\u20133 days a week', growth: 1.0, peak: 1.0, long: 1.0,  minWeeks: 1.0,  stepEvery: 4 },
-    veryActive:{ label: 'Very active',       blurb: 'Train 4+ days a week (gym, sport, running)', growth: 1.2, peak: 1.1, long: 1.0,  minWeeks: 0.9,  stepEvery: 4 }
+    sedentary: { label: 'Mostly sedentary',  blurb: 'Desk job, little other exercise', growth: 0.75, peak: 0.90, long: 0.95, minWeeks: 1.25, stepEvery: 3 },
+    light:     { label: 'Lightly active',    blurb: 'Some walking or the odd session', growth: 0.90, peak: 0.95, long: 1.0,  minWeeks: 1.1,  stepEvery: 4 },
+    active:    { label: 'Active',            blurb: 'Exercise 2\u20133 days a week', growth: 1.0,  peak: 1.0,  long: 1.0,  minWeeks: 1.0,  stepEvery: 4 },
+    veryActive:{ label: 'Very active',       blurb: 'Train 4+ days a week (gym, sport, running)', growth: 1.15, peak: 1.05, long: 1.0,  minWeeks: 0.9,  stepEvery: 4 }
   };
   const DEFAULT_FITNESS = 'active'; // same as before fitness existed
 
-  // Experience never lets peak weekly volume exceed this multiple of current
-  // volume (or current + PEAK_CAP_ADD km for low-volume runners).
-  const PEAK_CAP_MULT = 2.5;
-  const PEAK_CAP_ADD = 12;
+  // A safety net, not the main brake (the growth ceiling is): peak weekly volume
+  // never exceeds this multiple of current volume, or current + PEAK_CAP_ADD km
+  // for low-volume runners. Loose enough that a long timeline can build properly.
+  const PEAK_CAP_MULT = 3;
+  const PEAK_CAP_ADD = 20;
+  // Beginners starting from very little still add at least this per growth week (km).
+  const MIN_WEEKLY_ADD = 0.8;
 
   const RACE_NAMES = { 5: '5K', 10: '10K', 21.1: 'half marathon', 42.2: 'marathon', 50: '50K ultra', 100: '100K ultra' };
 
@@ -117,7 +122,7 @@ const PlanGenerator = (() => {
     const growthWeeks = buildWeeks - Math.floor(buildWeeks / stepEvery);
     const growthCeiling = Math.max(
       current * Math.pow(1 + L.growth * F.growth, growthWeeks),
-      current + 0.5 * F.growth * growthWeeks
+      current + MIN_WEEKLY_ADD * F.growth * growthWeeks
     );
     const wanted = Math.max(current * L.peakMult, longPeak * L.ratio) * F.peak;
     const cap = Math.max(current * PEAK_CAP_MULT, current + PEAK_CAP_ADD) * F.peak;
@@ -151,6 +156,13 @@ const PlanGenerator = (() => {
     for (let i = 0; i < easyCount; i++) {
       sessions.push({ name: 'Easy run', type: 'easy', distance: easyEach, status: 'planned' });
     }
+
+    // Rounding each run to 0.5 km can leave the week a little off its planned
+    // volume, which shows up as wobble in an otherwise rising plan. Put the
+    // difference on the last short run (an easy run, else the quality run).
+    const gap = Math.round((weeklyVolume - sessions.reduce((sum, x) => sum + x.distance, 0)) * 2) / 2;
+    const last = sessions[sessions.length - 1];
+    if (gap !== 0 && last.type !== 'long' && last.distance + gap >= 2) last.distance += gap;
     return sessions;
   }
 
